@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "abp-synth"
+version = "0.1.0"
+description = "Synthetic Athlete Biological Passport (ABP) time-series generator for anti-doping research."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "ABP-Synth Contributors" },
+]
+keywords = ["anti-doping", "ABP", "athlete-biological-passport", "synthetic-data", "time-series"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+    "scipy>=1.10",
+    "click>=8.0",
+]
+
+[project.optional-dependencies]
+remote = ["pyreadr>=0.5"]
+dev = ["pytest>=7.0", "ruff"]
+
+[project.scripts]
+abp-synth = "abp_synth.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Madhatter2099/ABP-Synth"
+Repository = "https://github.com/Madhatter2099/ABP-Synth"
+Issues = "https://github.com/Madhatter2099/ABP-Synth/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/abp_synth"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
