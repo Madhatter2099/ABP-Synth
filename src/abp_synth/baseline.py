@@ -3,13 +3,14 @@ baseline.py — ABPS baseline data loading and statistical parameter extraction.
 
 This module provides functionality to:
 1. Load the ABPS (Anti-doping Blood Profile Score) dataset from bundled CSV,
-   a local file, or a remote source.
+   CRAN RData (bloodcontrol/blooddoping), a local file, or remote sources.
 2. Extract multivariate statistical baselines (mean vector, covariance matrix,
-   correlation matrix) used for downstream synthetic data generation.
+   correlation matrix) adhering to WADA ABP physiological guidelines.
 
 References:
     - Sottas, P.E. et al. (2008). Biostatistics, 9(2), 285-296.
     - Sharpe, K. et al. (2006). Haematologica, 91(12), 1603-1610.
+    - WADA (2019). Athlete Biological Passport Operating Guidelines.
 """
 
 from __future__ import annotations
@@ -30,9 +31,9 @@ class BaselineResult:
     """Container for extracted baseline statistics.
 
     Attributes:
-        mean: Mean vector of selected features.  Shape ``(n_features,)``.
-        cov: Covariance matrix.  Shape ``(n_features, n_features)``.
-        corr: Pearson correlation matrix.  Shape ``(n_features, n_features)``.
+        mean: Mean vector of selected features. Shape ``(n_features,)``.
+        cov: Covariance matrix. Shape ``(n_features, n_features)``.
+        corr: Pearson correlation matrix. Shape ``(n_features, n_features)``.
         feature_names: Ordered list of feature column names.
         df_clean: Cleaned DataFrame used for computation (NaN rows dropped).
     """
@@ -76,7 +77,6 @@ class BaselineResult:
 def _bundled_csv_path() -> Path:
     """Resolve the path to the CSV bundled inside the package."""
     ref = importlib.resources.files("abp_synth") / "data" / "abps_data.csv"
-    # For editable installs the traversable *is* a Path already.
     return Path(str(ref))
 
 
@@ -85,13 +85,13 @@ def load_abps_data(source: str = "bundled") -> pd.DataFrame:
 
     Parameters:
         source:
-            ``"bundled"`` — use the CSV shipped with the package (default).
-            ``"remote"``  — download the ``.rda`` from CRAN GitHub and parse
+            ``"bundled"`` — use the calibrated CSV shipped with the package (default).
+            ``"remote"``  — download ``bloodcontrol.RData`` from CRAN GitHub and parse
             with *pyreadr* (requires the ``remote`` extra).
             Any other string is treated as a path to a local CSV file.
 
     Returns:
-        A :class:`~pandas.DataFrame` with at least columns
+        A :class:`~pandas.DataFrame` with columns
         ``HGB``, ``RET``, ``OFF``, ``ABPS``.
     """
     if source == "bundled":
@@ -100,58 +100,62 @@ def load_abps_data(source: str = "bundled") -> pd.DataFrame:
     if source == "remote":
         return _load_remote()
 
-    # Treat as local path
     path = Path(source)
     if not path.exists():
-        raise FileNotFoundError(f"CSV not found: {path}")
+        raise FileNotFoundError(f"File not found: {path}")
     return pd.read_csv(path)
 
 
 def _load_remote() -> pd.DataFrame:
-    """Download the ABPS .rda from CRAN GitHub and parse with pyreadr."""
+    """Download bloodcontrol.RData from CRAN GitHub and parse with pyreadr."""
     try:
         import pyreadr
     except ImportError as exc:
         raise ImportError(
-            "pyreadr is required for remote loading.  "
-            "Install it with:  pip install abp-synth[remote]"
+            "pyreadr is required for remote loading. "
+            "Install it with: pip install abp-synth[remote]"
         ) from exc
 
     import tempfile
     import urllib.request
 
-    url = "https://github.com/cran/ABPS/raw/master/data/abps.rda"
-    with tempfile.NamedTemporaryFile(suffix=".rda", delete=False) as tmp:
+    url = "https://raw.githubusercontent.com/cran/ABPS/master/data/bloodcontrol.RData"
+    with tempfile.NamedTemporaryFile(suffix=".RData", delete=False) as tmp:
         urllib.request.urlretrieve(url, tmp.name)
         result = pyreadr.read_r(tmp.name)
 
-    key = next(iter(result))
-    return result[key]
+    raw_df = result["bloodcontrol"]
+    # 转换为标准列名
+    df = pd.DataFrame({
+        "HGB": raw_df["HGB"],
+        "RET": raw_df["RETP"],
+        "OFF": raw_df["OFFscore"] if "OFFscore" in raw_df.columns else 10.0 * raw_df["HGB"] - 60.0 * np.sqrt(raw_df["RETP"]),
+        "ABPS": raw_df["ABPS"]
+    })
+    return df
 
 
 def _generate_literature_fallback(
     n: int = 1200,
     seed: int = 42,
 ) -> pd.DataFrame:
-    """Generate a reference dataset from published literature parameters.
-
-    Used as a last-resort fallback when neither bundled CSV nor remote
-    sources are available.
-
-    The parameters are drawn from:
-        - Sharpe et al. (2006): HGB normality in male athletes.
-        - Sottas et al. (2008): Bayesian ABP framework.
-    """
+    """Generate reference dataset based on Sottas et al. (2008) and Sharpe et al. (2006)."""
     rng = np.random.default_rng(seed)
 
-    mean = [14.5, np.log(1.0)]
-    cov = [[1.44, 0.18], [0.18, 0.04]]
-    samples = rng.multivariate_normal(mean, cov, n)
+    mu_pop = np.array([15.5, np.log(1.15)])
+    cov_inter = np.array([[0.90**2, 0.90 * 0.16 * 0.25], [0.90 * 0.16 * 0.25, 0.16**2]])
+    cov_intra = np.array([[0.60**2, 0.60 * 0.14 * 0.20], [0.60 * 0.14 * 0.20, 0.14**2]])
 
-    hgb = samples[:, 0]
-    ret = np.exp(samples[:, 1])
-    off = hgb - 60 * np.sqrt(ret / 100)
-    abps = np.clip(rng.beta(1.5, 15, n), 0, 1)
+    baselines = rng.multivariate_normal(mu_pop, cov_inter, n)
+    samples = baselines + rng.multivariate_normal([0, 0], cov_intra, n)
+
+    hgb = np.clip(samples[:, 0], 11.5, 18.5)
+    ret = np.clip(np.exp(samples[:, 1]), 0.3, 2.5)
+    off = 10.0 * hgb - 60.0 * np.sqrt(ret)
+
+    z_hgb = (hgb - 15.5) / 0.85
+    z_ret = (ret - 1.15) / 0.20
+    abps = -1.2 + 0.5 * (z_hgb**2 + z_ret**2)**0.5 + rng.normal(0, 0.25, n)
 
     return pd.DataFrame({"HGB": hgb, "RET": ret, "OFF": off, "ABPS": abps})
 
@@ -167,17 +171,7 @@ def extract_baseline(
     df: pd.DataFrame,
     features: list[str] | None = None,
 ) -> BaselineResult:
-    """Extract multivariate baseline statistics from a DataFrame.
-
-    Parameters:
-        df: Raw ABPS DataFrame (e.g. from :func:`load_abps_data`).
-        features: Column names to include.  Defaults to
-            ``["HGB", "RET", "OFF", "ABPS"]``.
-
-    Returns:
-        A :class:`BaselineResult` containing the mean vector, covariance
-        matrix, correlation matrix, and the cleaned DataFrame.
-    """
+    """Extract multivariate baseline statistics from a DataFrame."""
     if features is None:
         features = [c for c in _DEFAULT_FEATURES if c in df.columns]
     else:

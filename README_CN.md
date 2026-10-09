@@ -63,14 +63,18 @@ abp-synth visualize --input ./output --output ./figures
 
 ### 合成时序生成
 
-正常运动员使用带均值回归的随机游走：
+正常运动员使用分层混合效应自回归模型（Hierarchical Mixed-Effect AR(1)）：
 
-$$\mathbf{x}_t = \mathbf{x}_{t-1} + \boldsymbol{\epsilon}_t + \alpha(\boldsymbol{\mu} - \mathbf{x}_{t-1})$$
+$$\mathbf{x}_{i,t} = \mathbf{x}_{i,t-1} + \boldsymbol{\epsilon}_t + \alpha(\mathbf{b}_i - \mathbf{x}_{i,t-1})$$
+
+每位运动员拥有独立的生理稳态中枢 $\mathbf{b}_i \sim \mathcal{N}(\boldsymbol{\mu}_{pop}, \boldsymbol{\Sigma}_{inter})$，围绕其进行生理自回归波动并包含困难负样本扰动。
 
 ### EPO 异常注入
 
-- **阶段 A（注射期）**：HGB 线性上升 +1.5 ~ +3.0 g/dL
-- **阶段 B（停药期）**：RET 正弦骤降 −0.25% ~ −0.50%
+严格模拟红细胞双相生理动力学：
+
+- **阶段 A（注射刺激期）**：骨髓受刺激，未成熟网织红细胞暴涨（RET% 峰值可达 2.0% ~ 3.5%），成熟红细胞积聚使 HGB 逐步上升 +1.8 ~ +2.8 g/dL。
+- **阶段 B（停药撤药期）**：强负反馈机制使 RET% 骤降至抑制谷底（0.15% ~ 0.40%），成熟红细胞寿命长衰减慢使 HGB 维持高位，形成标志性**生理剪刀差**，WADA 核心指标 $OFF = 10 \times HGB - 60\sqrt{RET}$ 飙升至 135 ~ 165。
 
 ---
 

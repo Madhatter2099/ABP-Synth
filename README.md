@@ -74,28 +74,28 @@ Statistics are extracted from the ABPS dataset (bundled as CSV):
 
 | Parameter | Symbol | Description |
 |---|---|---|
-| **Hemoglobin** | HGB (g/dL) | Oxygen-carrying capacity; rises with EPO |
-| **Reticulocyte %** | RET (%) | Immature RBC fraction; drops after EPO withdrawal |
-| **OFF Score** | HGB − 60√RET | WADA composite marker |
-| **ABPS Score** | ABPS | Bayesian violation probability |
+| **Hemoglobin** | HGB (g/dL) | Oxygen-carrying capacity; rises with EPO stimulation |
+| **Reticulocyte %** | RET (%) | Immature RBC fraction; surges during stimulation and plunges during withdrawal |
+| **OFF Score** | 10×HGB − 60√RET | WADA official composite marker (male norm ~85-95, >115 alert) |
+| **ABPS Score** | ABPS | Bayesian abnormality score |
 
 ![Distribution](docs/images/distribution.png)
 ![Correlation](docs/images/correlation.png)
 
 ### Synthetic Time-Series Generation
 
-Clean athlete profiles are generated via a mean-reverting random walk:
+Clean athlete profiles are generated via a hierarchical autoregressive mixed-effects model:
 
-$$\mathbf{x}_t = \mathbf{x}_{t-1} + \boldsymbol{\epsilon}_t + \alpha(\boldsymbol{\mu} - \mathbf{x}_{t-1})$$
+$$\mathbf{x}_{i,t} = \mathbf{x}_{i,t-1} + \boldsymbol{\epsilon}_t + \alpha(\mathbf{b}_i - \mathbf{x}_{i,t-1})$$
 
-where $\boldsymbol{\epsilon}_t \sim \mathcal{N}(\mathbf{0},\, \sigma^2 \boldsymbol{\Sigma})$ and $\alpha = 0.05$.
+where $\mathbf{b}_i \sim \mathcal{N}(\boldsymbol{\mu}_{pop}, \boldsymbol{\Sigma}_{inter})$, $\boldsymbol{\epsilon}_t \sim \mathcal{N}(\mathbf{0}, \boldsymbol{\Sigma}_{intra})$, and $\alpha = 0.15$.
 
-### EPO Doping Injection
+### Physiological EPO Doping Dynamics
 
-Two-phase physiological response:
+Biphasic pharmacokinetic & pharmacodynamic response:
 
-- **Phase A (Injection)**: HGB linear ramp-up (+1.5 to +3.0 g/dL)
-- **Phase B (Withdrawal)**: RET sinusoidal suppression (−0.25% to −0.50%)
+- **Phase A (Stimulation)**: Bone marrow stimulation causes an immediate surge in RET% (up to 2.0%~3.5%), followed by a progressive climb in HGB (+1.8 to +2.8 g/dL).
+- **Phase B (Withdrawal / Washout)**: Cessation triggers negative feedback, plunging RET% into an inhibitory valley (0.15%~0.40%). Long erythrocyte lifespan (~120 days) keeps HGB elevated via slow exponential decay, generating the hallmark **scissors pattern** and surging OFF scores (135~165).
 
 ---
 
